@@ -801,7 +801,7 @@
           <div class="service-price-line"><span>Service subtotal · bowls + water</span><b data-service-price="5">0,00 €</b></div>
         </div>
 </section></main>
-<section class="summary" id="summary"><div class="summary-head"><div><div class="eyebrow" style="color:#aaa59d">Live event summary</div><h2>Your order</h2></div><div class="summary-head-total"><b id="grandTotal">75,00 €</b><small id="grandBowlCount">0 / 420 bowls</small></div></div><div class="summary-grid" id="summaryGrid"></div><div class="summary-actions"><button type="button" class="primary" id="copySummary">Copy order summary</button><button type="button" id="shareLink">Copy shareable link</button><button type="button" id="downloadCsv">Download CSV</button><button type="button" id="resetAll">Reset all</button></div><div class="smallprint">* Gluten-Free claims remain subject to final allergen-sheet and cross-contamination validation.</div></section>
+<section class="summary" id="summary"><div class="summary-head"><div><div class="eyebrow" style="color:#aaa59d">Live event summary</div><h2>Your order</h2></div><div class="summary-head-total"><b id="grandTotal">75,00 €</b><small id="grandBowlCount">0 / 420 bowls</small></div></div><div class="summary-grid" id="summaryGrid"></div><div class="summary-actions"><button type="button" class="primary" id="copySummary">Copy order summary</button><button type="button" id="shareLink">Copy shareable link</button><button type="button" id="downloadCsv">Download order CSV</button><button type="button" id="resetAll">Reset all</button></div><div class="smallprint">* Gluten-Free claims remain subject to final allergen-sheet and cross-contamination validation.</div></section>
 </div><div class="toast" id="toast">Copied</div>
 <script>
 (()=>{
@@ -918,17 +918,53 @@ Selection link: ${currentLink()}`;return out;
 async function copy(text,msg){try{await navigator.clipboard.writeText(text)}catch(e){const t=document.createElement('textarea');t.value=text;document.body.appendChild(t);t.select();document.execCommand('copy');t.remove()}toast(msg)}
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(window.__to);window.__to=setTimeout(()=>t.classList.remove('show'),1500)}
 function csv(){
- const rows=[['Date','Service','Item','Category','Unit Price EUR','Quantity','Line Total EUR']];
- services.forEach((s,si)=>{
-   bowls.forEach(b=>{if(val(si,b.id))rows.push([s.date,s.meal,b.name,b.collection,BOWL_PRICE.toFixed(2),val(si,b.id),(val(si,b.id)*BOWL_PRICE).toFixed(2)])});
-   if(drinkVal(si,'still'))rows.push([s.date,s.meal,'Still water','Drink',WATER_PRICE.toFixed(2),drinkVal(si,'still'),(drinkVal(si,'still')*WATER_PRICE).toFixed(2)]);
-   if(drinkVal(si,'sparkling'))rows.push([s.date,s.meal,'Sparkling water','Drink',WATER_PRICE.toFixed(2),drinkVal(si,'sparkling'),(drinkVal(si,'sparkling')*WATER_PRICE).toFixed(2)]);
+ const fr=n=>Number(n||0).toFixed(2).replace('.',',');
+ const esc=v=>'"'+String(v??'').replaceAll('"','""')+'"';
+ const rows=[];
+ const company=$('#clientName')?.value.trim()||'Fashionweekstudio';
+ const contact=$('#contactName')?.value.trim()||'';
+ const email=$('#contactEmail')?.value.trim()||'';
+ rows.push(['ILIA × FASHIONWEEKSTUDIO — CATERING ORDER']);
+ rows.push([]);
+ rows.push(['Company',company]);
+ if(contact)rows.push(['Contact',contact]);
+ if(email)rows.push(['Email',email]);
+ rows.push(['Bowls per service','70']);
+ rows.push(['Bowl unit price (€)',fr(BOWL_PRICE)]);
+ rows.push(['Water unit price (€)',fr(WATER_PRICE)]);
+ rows.push(['Delivery per event date (€)',fr(DELIVERY_PRICE)]);
+ rows.push([]);
+ rows.push(['DATE','SERVICE','ITEM','CATEGORY','UNIT PRICE (€)','QTY','LINE TOTAL (€)']);
+ events.forEach(ev=>{
+   ev.services.forEach(si=>{
+     const s=services[si];
+     let hasLines=false;
+     bowls.forEach(b=>{
+       const q=val(si,b.id);
+       if(q){rows.push([s.date,s.meal,b.name,b.collection,fr(BOWL_PRICE),q,fr(q*BOWL_PRICE)]);hasLines=true;}
+     });
+     const sw=drinkVal(si,'still'),sp=drinkVal(si,'sparkling');
+     if(sw){rows.push([s.date,s.meal,'Still water','Drink',fr(WATER_PRICE),sw,fr(sw*WATER_PRICE)]);hasLines=true;}
+     if(sp){rows.push([s.date,s.meal,'Sparkling water','Drink',fr(WATER_PRICE),sp,fr(sp*WATER_PRICE)]);hasLines=true;}
+     if(!hasLines)rows.push([s.date,s.meal,'No selection yet','','','','']);
+     rows.push(['',s.meal+' SUBTOTAL','','','',total(si)+' bowls',fr(serviceCost(si))]);
+     rows.push([]);
+   });
+   rows.push([ev.date,'EVENT','Delivery','Delivery',fr(DELIVERY_PRICE),1,fr(DELIVERY_PRICE)]);
+   rows.push(['',ev.date+' EVENT TOTAL','','','','',fr(eventCost(ev))]);
+   rows.push([]);
  });
- events.forEach(ev=>rows.push([ev.date,'Event','Delivery','Delivery',DELIVERY_PRICE.toFixed(2),1,DELIVERY_PRICE.toFixed(2)]));
- rows.push(['','','GRAND TOTAL','','','',grandPrice().toFixed(2)]);
- return rows.map(r=>r.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\\n');
+ rows.push(['','','GRAND TOTAL','','','',fr(grandPrice())]);
+ rows.push(['','','TOTAL BOWLS','','',services.reduce((n,_,i)=>n+total(i),0),'']);
+ return 'sep=;\\n'+rows.map(r=>r.map(esc).join(';')).join('\\n');
 }
-function dl(){const bl=new Blob([csv()],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(bl);a.download='ILIA_Fashionweekstudio_selection.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+function dl(){
+ const bl=new Blob(['\\ufeff'+csv()],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');
+ a.href=URL.createObjectURL(bl);
+ a.download='ILIA_Fashionweekstudio_order.csv';
+ a.click();
+ setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
 document.addEventListener('click',e=>{
  const s=e.target.closest('.step');if(s){const si=+s.dataset.service,bid=s.dataset.bowl;setQty(si,bid,val(si,bid)+(s.classList.contains('plus')?1:-1));return}
  const ds=e.target.closest('.drink-step');if(ds){const si=+ds.dataset.service,type=ds.dataset.drink;setDrink(si,type,drinkVal(si,type)+(ds.classList.contains('plus')?1:-1));return}
